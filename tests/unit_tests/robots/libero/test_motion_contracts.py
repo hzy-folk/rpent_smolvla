@@ -46,9 +46,13 @@ class MotionEnv:
         return self.observation(), 0, self.terminated, self.truncated, {}
 
 
-def primitives(env):
+def primitives(env, monitor=None):
     driver = LiberoPrimitives(
-        env=env, model=None, sam3_client=None, check_cancelled=lambda: None
+        env=env,
+        model=None,
+        sam3_client=None,
+        check_cancelled=lambda: None,
+        motion_monitor=monitor,
     )
     driver.set_obs(env.observation())
     return driver
@@ -163,3 +167,78 @@ def test_yaw_projection_above_threshold_is_accepted():
     assert "error" not in result
     assert result["final_yaw_error_rad"] == 0.0
     assert not env.actions
+
+
+class StuckEnv(MotionEnv):
+    def step(self, action):
+        self.actions.append(action.copy())
+        return self.observation(), 0, False, False, {}
+
+
+def test_optional_assessment_leaves_control_actions_unchanged():
+    from robots.libero.episode_feedback import MotionMonitor
+
+    baseline, enabled = MotionEnv(), MotionEnv()
+    plain = primitives(baseline).move_to([0.1, 0, 0]).data
+    assessed = primitives(enabled, MotionMonitor()).move_to([0.1, 0, 0]).data
+    assert "motion_assessment" not in plain
+    assert assessed["motion_assessment"]["status"] == "completed"
+    np.testing.assert_array_equal(baseline.actions, enabled.actions)
+    assert assessed["motion_assessment"]["executed_steps"] == len(enabled.actions)
+
+
+def test_three_stalls_warn_and_new_target_or_conditions_reset():
+    from robots.libero.episode_feedback import MotionMonitor
+
+    driver = primitives(StuckEnv(), MotionMonitor())
+    for count in range(1, 4):
+        result = driver.move_to([0.1, 0, 0], max_steps=2).data["motion_assessment"]
+        assert result["status"] == "no_progress"
+        assert result["no_progress_streak"] == count
+        assert result["change_required"] is (count == 3)
+    changed = driver.move_to([0.1, 0, 0], gripper=1, max_steps=2).data
+    assert changed["motion_assessment"]["no_progress_streak"] == 1
+    changed = driver.move_to([0.2, 0, 0], gripper=1, max_steps=2).data
+    assert changed["motion_assessment"]["no_progress_streak"] == 1
+
+
+def test_target_comparison_uses_group_reference_not_drifting_previous():
+    from robots.libero.episode_feedback import MotionMonitor
+
+    driver = primitives(StuckEnv(), MotionMonitor())
+    counts = [
+        driver.move_to([x, 0, 0], max_steps=1).data["motion_assessment"][
+            "no_progress_streak"
+        ]
+        for x in [0.1, 0.104, 0.108]
+    ]
+    assert counts == [1, 2, 1]
+
+
+def test_partial_progress_and_yaw_only_progress_are_not_stalls():
+    from robots.libero.episode_feedback import MotionMonitor
+
+    result = (
+        primitives(MotionEnv(), MotionMonitor()).move_to([0.2, 0, 0], max_steps=1).data
+    )
+    assert result["motion_assessment"]["status"] == "partial_progress"
+    result = (
+        primitives(MotionEnv(), MotionMonitor())
+        .move_to([0, 0, 0], target_yaw=0.8, max_steps=1)
+        .data
+    )
+    assert result["motion_assessment"]["status"] == "partial_progress"
+    assert result["motion_assessment"]["no_progress_streak"] == 0
+
+
+@pytest.mark.parametrize("terminal", ["terminated", "truncated"])
+def test_episode_end_does_not_trigger_recovery(terminal):
+    from robots.libero.episode_feedback import MotionMonitor
+
+    result = (
+        primitives(MotionEnv(terminal=terminal), MotionMonitor())
+        .move_to([0.2, 0, 0])
+        .data
+    )
+    assert result["motion_assessment"]["reason"] == "episode_ended"
+    assert not result["motion_assessment"]["change_required"]

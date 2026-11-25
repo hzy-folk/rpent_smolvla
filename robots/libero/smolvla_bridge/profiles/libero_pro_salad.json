@@ -1,0 +1,31 @@
+{
+  "name": "smolvla_osc7",
+  "checkpoint": "${SMOLVLA_OSC7_CHECKPOINT}",
+  "assets": {
+    "lerobot_src": "",
+    "base_model_dir": "${SMOLVLA_BASE_DIR}",
+    "vlm_dir": "${SMOLVLA_VLM_DIR}"
+  },
+  "state_dim": 8,
+  "action_dim": 7,
+  "task_prompt": "pick up the salad dressing",
+  "cameras": 2,
+  "image_size": 256,
+  "chunk_size": 16,
+  "exec_steps": 5,
+  "n_action_steps": 5,
+  "num_steps": 10,
+  "tokenizer_max_length": 64,
+  "state_adapter": "strict",
+  "action_adapter": "strict",
+  "env_action_dim": 7,
+  "action_bounds": [
+    -1.0,
+    1.0
+  ],
+  "device": "cuda",
+  "dtype": "bfloat16",
+  "state_schema": "RPent LIBERO 原生 8 维状态（eef 位姿 + 夹爪），与 pi05_vla_client 一致",
+  "action_schema": "libero.osc_pose.delta.v1: dx,dy,dz,dax,day,daz,gripper",
+  "notes": "LIBERO-Pro salad dressing: fixed training prompt, 8D state, 7D OSC actions; requires a matching trainable/stats checkpoint."
+}

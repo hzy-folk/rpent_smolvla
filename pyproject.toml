@@ -59,10 +59,10 @@ rpent-check-llm = "rpent.cli.check_llm:main"
 rpent-flywheel = "rpent.flywheel.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/RLinf/RPent"
-Repository = "https://github.com/RLinf/RPent"
+Homepage = "https://github.com/hzy-folk/rpent_smolvla"
+Repository = "https://github.com/hzy-folk/rpent_smolvla"
 Documentation = "https://rpent.readthedocs.io/en/latest/"
-"Bug Report" = "https://github.com/RLinf/RPent/issues"
+"Bug Report" = "https://github.com/hzy-folk/rpent_smolvla/issues"
 
 [project.optional-dependencies]
 test = [
@@ -274,6 +274,7 @@ include = ["rpent*", "robots", "robots.*"]
 exclude = ["tests*", "docs*", "examples*", "docker*", "toolkits*"]
 
 [tool.setuptools.package-data]
+"robots.libero.smolvla_bridge" = ["profiles/*.json", "processor_overrides/*.json", "assets_manifest.json", "run_server.sh", "run_episode.sh", "env.example.sh", "requirements.txt", "README.md", "README.en.md", "VALIDATION.md", "memory/**/*.md", "memory/**/*.json", "memory/**/*.jsonl"]
 "robots.robodojo" = ["guides/*.md"]
 "rpent.dashboard" = ["*.html", "static/*.css", "static/*.js"]
 "robots.yam" = ["config/*.yaml", "config/*.json", "guides/*.md"]

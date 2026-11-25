@@ -240,11 +240,17 @@ def build_planner(
     dashboard_events: DashboardEventSink,
     no_images: bool = False,
     interactive: bool = False,
+    episode_brief: bool = False,
+    compact_observation_images: bool = False,
 ) -> Planner:
     """Build a planner for the given backend, resolving credentials from env vars."""
     # Imports are deferred to avoid a circular import: api_loop / claude_code /
     # codex all import from this module (PlannerResult).
 
+    if (episode_brief or compact_observation_images) and (
+        planner_type != "api" or robot_name != "libero"
+    ):
+        raise ValueError("Episode context options require --robot libero --planner api")
     if planner_type == "api":
         from rpent.planner.api_loop import ApiAgentLoop
 
@@ -260,6 +266,14 @@ def build_planner(
             no_images=no_images,
             timeout_s=api_timeout_s,
             interactive=interactive,
+            **{
+                key: True
+                for key, enabled in (
+                    ("episode_brief", episode_brief),
+                    ("compact_observation_images", compact_observation_images),
+                )
+                if enabled
+            },
         )
     if planner_type == "claude_code":
         from rpent.planner.claude_code import ClaudeCodePlanner

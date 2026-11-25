@@ -296,3 +296,48 @@ Dashboard
 3. 如果可用工具需要调整（比如将 ``pi0_pick`` 改成 ``mymodel_pick``），相应更新 ``robots/libero/toolkit.py``。
 
 完整流程见 :doc:`../development/add_primitive`。
+
+可选 API 运行反馈
+-------------------
+
+下面三个开关相互独立，默认全部关闭。目前要求 ``--robot libero --planner api``，
+也适用于 API Dashboard 和探索会话：
+
+* ``--episode-brief``：在最新反馈后加入最多四行的事实简报，每轮替换旧版本，
+  不额外调用模型。夹爪测量和抓取启发式不等于抓取确认。
+* ``--compact-observation-images``：保留最新观测、首次观测的场景，以及最近最多两组
+  关键事件前后图片（抓取、释放、接触或移动异常）。较早的普通移动图片不再进入后续
+  请求，但文字结果和本地原图保留。显式 ``read_image``、``view_env_state`` 请求和
+  分割叠加图至少送达一次。``--no-images`` 仍会关闭所有发给模型的图片。
+* ``--assess-movement``：为 ``move_to`` 增加 ``motion_assessment`` 数值反馈，区分
+  ``completed``、``partial_progress``、``no_progress`` 和 ``unknown``。
+  连续三次可比较的调用无进展时，要求重新观察或改变方法；程序不自动补救或拦截运动。
+
+在现有 API 任务命令后按需添加任意组合：
+
+.. code-block:: bash
+
+   --episode-brief --compact-observation-images --assess-movement
+
+移动进展需超过 ``--move-min-progress-m`` （默认 0.002 m）与
+``--move-min-progress-fraction`` （默认 0.02）乘初始误差两者中的较大值。
+同组目标相对该组最初目标的偏移不超过 ``--move-target-tolerance-m`` （默认 0.005 m）。
+控制条件变化、其他物理动作、重置、取得进展或结果未知会打断计数；只读调用不增加计数。
+要求调整 yaw 时会考虑朝向进展。这些初始阈值需结合具体配置验证。
+模型权重、VLA 输入图片和桥接固定指令不受影响。
+
+
+SmolVLA 沙拉酱任务桥接
+----------------------
+
+``robots/libero/smolvla_bridge/`` 包含独立 HTTP VLA 服务、可配置路径的 profile、
+独立模型依赖、资产哈希、启动脚本和一份精简历史记忆，对应 LIBERO-Pro 的
+``libero_object_task`` 、task 8、seed 0。安装、权重准备、双终端启动和结果判读见
+仓库中的 :download:`SmolVLA 使用说明 <../../../../robots/libero/smolvla_bridge/README.md>` 。
+
+模型环境需独立安装；桥接保持训练指令 ``pick up the salad dressing`` 固定，
+使用 8 维状态、7 维 OSC 动作和两路 256×256 图片。通过现有 Pi0.5 客户端连接：
+``--am-backend pi05 --am-endpoint http://127.0.0.1:8320`` 。
+微调 checkpoint 需单独提供，目前尚无公开下载地址。新克隆仓库可以先执行无需
+权重的 mock 协议自检，真实推理仍需取得该 checkpoint。已有成功记录不代表稳定
+成功率。三个可选 API 反馈开关默认关闭，需向 ``run_episode.sh`` 显式传入。

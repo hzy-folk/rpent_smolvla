@@ -28,3 +28,36 @@ build/
 
 # Standalone calibration environment.
 .venv-calibration/
+
+# Standalone SmolVLA environment and private machine configuration.
+/.venv-smolvla/
+/robots/libero/smolvla_bridge/env.local.sh
+
+# Virtual environments and developer caches must stay local to each clone.
+/.venv*/
+/venv/
+/.pytest_cache/
+/.ruff_cache/
+/.coverage
+/coverage.xml
+/htmlcov/
+/dist/
+
+# Private configuration; keep the documented templates publishable.
+.env
+.env.*
+!.env.example
+env.local.sh
+
+# Model weights can be distributed separately through Releases or a model hub.
+*.pt
+*.pth
+*.safetensors
+*.onnx
+
+# Full development corpora; the curated bridge memory remains versioned.
+/memory_preview*/
+
+# Local paper copy and development request dumps; public guides live in docs/.
+/HarnessVLA.pdf
+/Process/

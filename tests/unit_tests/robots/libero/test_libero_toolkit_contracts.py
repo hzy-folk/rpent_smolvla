@@ -344,3 +344,55 @@ def test_parallel_segments_preserve_artifacts_without_capturing_state(
     result = robot_toolkit.execute_tool("segment", {"prompt": "next"})
     assert result.data["segment_artifact"] == f"segment_{calls + 1:02d}.json"
     assert state.load(result.data["segment_artifact"], step=0)["prompt"] == "next"
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+def test_movement_option_and_thresholds_reach_toolkit_factory(
+    tmp_path, monkeypatch, enabled
+):
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--output-dir")
+    parser.add_argument("--memory-dir")
+    parser.add_argument("--memory-profile", default="hf")
+    parser.add_argument("--planner", default="api")
+    spec = robot_spec.get_robot_spec()
+    spec.add_cli_args(parser, False)
+    arguments = ["--suite", "libero_object_task", "--task", "8"]
+    if enabled:
+        arguments += ["--assess-movement", "--move-min-progress-m", "0.003"]
+    config = spec.parse_config(parser.parse_args(arguments))
+    monkeypatch.setattr(
+        toolkit, "LiberoToolkit", lambda **kwargs: SimpleNamespace(**kwargs)
+    )
+    instance = robot_spec.get_toolkit(
+        runtime_kwargs={}, dashboard_events=NullDashboardEventSink(), config=config
+    )
+    assert instance.assess_movement is enabled
+    if enabled:
+        assert instance.movement_thresholds["min_progress_m"] == 0.003
+    else:
+        assert "movement_thresholds" not in config.prompt_vars
+
+
+@pytest.mark.parametrize("value", ["nan", "-1", "0"])
+def test_invalid_movement_threshold_rejected_during_config(value):
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--output-dir")
+    parser.add_argument("--memory-dir")
+    parser.add_argument("--memory-profile", default="hf")
+    parser.add_argument("--planner", default="api")
+    spec = robot_spec.get_robot_spec()
+    spec.add_cli_args(parser, False)
+    args = parser.parse_args(
+        [
+            "--suite",
+            "libero_object_task",
+            "--task",
+            "8",
+            "--assess-movement",
+            "--move-min-progress-m",
+            value,
+        ]
+    )
+    with pytest.raises(ValueError, match="finite and positive"):
+        spec.parse_config(args)

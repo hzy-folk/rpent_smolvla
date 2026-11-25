@@ -86,6 +86,7 @@ def build_env_cfg(
             "init_params": {
                 "camera_heights": 256,
                 "camera_widths": 256,
+                "control_freq": 20,
                 # Render depth too, so we can back-project pixels to world
                 # from depth + camera calibration
                 "camera_depths": True,

@@ -113,6 +113,8 @@ def solve(tmp_path, model, toolkit=None, events=None, **kwargs):
             "no_images",
             "reasoning_effort",
             "interactive",
+            "episode_brief",
+            "compact_observation_images",
         )
         if key in kwargs
     }
@@ -328,6 +330,7 @@ def image_state(tmp_path):
     return state
 
 
+@pytest.mark.parametrize("compact", [False, True])
 @pytest.mark.parametrize("no_images", [False, True])
 @pytest.mark.parametrize(
     "name,step,media_type",
@@ -338,7 +341,7 @@ def image_state(tmp_path):
     ],
 )
 def test_read_image_returns_saved_artifact_and_records_call(
-    tmp_path, image_state, monkeypatch, no_images, name, step, media_type
+    tmp_path, image_state, monkeypatch, no_images, name, step, media_type, compact
 ):
     events = Events()
     toolkit = RobotToolkit(events, state=image_state)
@@ -367,6 +370,7 @@ def test_read_image_returns_saved_artifact_and_records_call(
         toolkit,
         events,
         no_images=no_images,
+        compact_observation_images=compact,
     )
     assert result.error is None
     assert result.finish_result == {"_finish": True, **FINISH_ARGS}
@@ -1622,3 +1626,86 @@ def test_interrupted_tool_arguments_are_retained_without_execution(tmp_path):
     assert call.arguments.data == '{ "position":'
     assert call.arguments.completeness == "partial"
     assert call.status == "not_executed" and toolkit.calls == []
+
+
+@pytest.mark.parametrize("compact", [False, True])
+@pytest.mark.parametrize("brief", [False, True])
+def test_optional_episode_context_projects_real_sdk_requests(tmp_path, compact, brief):
+    events = Events()
+    toolkit = RobotToolkit(events)
+    position = {"step": -1}
+    toolkit.episode_brief = lambda: (
+        f"[Brief | step {position['step']}]\nAttention: holding not inferred."
+    )
+
+    def observation(name):
+        def run():
+            position["step"] += 1
+            step = position["step"]
+            command = None if name == "view_env_state" else {"action": name}
+            return ToolResult(
+                data={
+                    "step": step,
+                    "state": {},
+                    "log": {"command": command, "result": {"final_dist_m": 0.001}},
+                },
+                images=[f"frame-{step}".encode()],
+            )
+
+        return run
+
+    sequence = ["view_env_state", "move_to", "pi0_pick", "move_to", "move_to"]
+    for name in set(sequence):
+        toolkit.register(name, observation(name))
+    histories = []
+
+    async def stream(messages, info):
+        histories.append(copy.deepcopy(messages))
+        index = len(histories) - 1
+        yield tool(sequence[index]) if index < len(sequence) else finish()
+
+    result, _, _ = solve(
+        tmp_path,
+        FunctionModel(stream_function=stream),
+        toolkit,
+        events,
+        episode_brief=brief,
+        compact_observation_images=compact,
+    )
+    assert result.error is None
+    assert result.stats["turns_used"] == 6  # no summarizer API request
+    from pydantic_ai.messages import TextContent
+
+    for index, messages in enumerate(histories):
+        contents = [
+            item
+            for message in messages
+            if isinstance(message, ModelRequest)
+            for part in message.parts
+            if isinstance(part, (UserPromptPart, ToolReturnPart))
+            and isinstance(part.content, (list, tuple))
+            for item in part.content
+        ]
+        briefs = [
+            item.content
+            for item in contents
+            if isinstance(item, TextContent) and item.metadata == "rpent.episode_brief"
+        ]
+        assert len(briefs) == int(brief)
+        if brief:
+            assert f"step {index - 1}" in briefs[0]
+    images = [
+        item.data
+        for message in histories[-1]
+        if isinstance(message, ModelRequest)
+        for part in message.parts
+        if isinstance(part, (UserPromptPart, ToolReturnPart))
+        and isinstance(part.content, (list, tuple))
+        for item in part.content
+        if isinstance(item, BinaryContent)
+    ]
+    assert b"frame-4" in images  # latest always visible
+    assert b"frame-1" in images and b"frame-2" in images  # grasp comparison
+    assert (b"frame-3" in images) is (not compact)
+    # Original tool feedback remains in the returned transcript.
+    assert len([m for m in result.messages if m.get("name") == "move_to"]) == 3

@@ -67,10 +67,12 @@ class LiberoPrimitives:
         check_cancelled: Callable[[], None],
         molmo_client: MolmoClient | None = None,
         policy_kind: str = "vla",
+        motion_monitor=None,
     ):
         self.env = env
         self.model = model
         self.policy_kind = policy_kind
+        self._motion_monitor = motion_monitor
         self._sam3_client = sam3_client
         self._segment_index_lock = threading.Lock()
         self._segment_index = 0
@@ -118,6 +120,8 @@ class LiberoPrimitives:
         self._last_obs_gripper = float(abs(gp[0]) + abs(gp[1]))
 
     def reset(self):
+        if self._motion_monitor is not None:
+            self._motion_monitor.reset()
         obs, info = self.env.reset()
         if self.policy_kind == "wam":
             self.model.reset()
@@ -380,6 +384,15 @@ class LiberoPrimitives:
             return (float(target_yaw) - yaw + np.pi) % (2 * np.pi) - np.pi
 
         target = np.asarray(_normalize_xyz(xyz), dtype=np.float32)
+        start_error = None
+        start_yaw_error = None
+        executed_steps = 0
+        if self._motion_monitor is not None:
+            start_error = float(np.linalg.norm(target - self._last_obs_eef_pos))
+            start_yaw_error = yaw_error() if target_yaw is not None else None
+            if isinstance(start_yaw_error, ToolResult):
+                self._motion_monitor.reset()
+                return start_yaw_error
         traj = []
         for step in range(max_steps):
             cur = self._last_obs_eef_pos
@@ -394,6 +407,8 @@ class LiberoPrimitives:
             )
             err = yaw_error() if target_yaw is not None else 0.0
             if isinstance(err, ToolResult):
+                if self._motion_monitor is not None:
+                    self._motion_monitor.reset()
                 return err
             if dist < tol and abs(err) < yaw_tol:
                 break
@@ -406,6 +421,7 @@ class LiberoPrimitives:
                 action[5] = float(np.clip(step_dyaw / 0.10, -1.0, 1.0))
             action[6] = gripper
             self._step_env(action)
+            executed_steps += 1
             if self.env.terminated or self.env.truncated:
                 break
         final = self._last_obs_eef_pos
@@ -425,8 +441,28 @@ class LiberoPrimitives:
         if target_yaw is not None:
             err = yaw_error()
             if isinstance(err, ToolResult):
+                if self._motion_monitor is not None:
+                    self._motion_monitor.reset()
                 return err
             result.data["final_yaw_error_rad"] = round(float(err), 4)
+        if self._motion_monitor is not None:
+            result.data["motion_assessment"] = self._motion_monitor.assess(
+                target=target,
+                start_error=start_error,
+                end_error=float(np.linalg.norm(target - final)),
+                tol=tol,
+                gripper=gripper,
+                step_clip=step_clip,
+                action_scale=action_scale,
+                target_yaw=target_yaw,
+                start_yaw_error=start_yaw_error,
+                end_yaw_error=err if target_yaw is not None else None,
+                yaw_tol=yaw_tol,
+                yaw_step_clip=yaw_step_clip,
+                executed_steps=executed_steps,
+                terminated=self.env.terminated,
+                truncated=self.env.truncated,
+            )
         return result
 
     @tool

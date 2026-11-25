@@ -1,0 +1,56 @@
+{
+  "suite": "libero_object_task",
+  "task_id": 8,
+  "seed": 0,
+  "regime": "strict_perception",
+  "task_language": "Pick the salad dressing and place it in the basket",
+  "terminated": true,
+  "final_step": 13,
+  "total_attempts": 1,
+  "strategy_notes": [
+    "Read robots/libero/guides/strict_hybrid_guide.md, pro_hybrid_guide.md, env_calibration.md; local memory root memory/: MEMORY.md, task-specific/object_task_t8_s0.json, task-specific/object_task_t8_s0_recipe.jsonl, task-family/task-family_libero_object_task_t8.md, global/verify-partial-lift-grasps.md, global/sample-cavity-floor.md.",
+    "Identified green-capped Ranch Dressing by readable agentview label. Fresh agentview cap samples (558,548),(565,560),(571,540) median xyz [0.1605,0.0262,0.1456]. Wrist samples (641,520),(635,540),(660,524) accepted median [0.1532,0.0307,0.146], spatially consistent.",
+    "Basket agentview samples (477,800),(480,840),(490,870) struck lining median [-0.0465,0.2888,0.0982]. Overhead wrist floor region rows 430:550 cols 395:585 z 0:0.04 gave cavity center [0.009,0.2784,0.0118].",
+    "First two short generic Pi0 calls failed; full task prompt moved empty gripper toward basket. Recovered within same episode through safe waypoints and lower preposition. Fourth short prompt grasped dressing visibly, despite heuristic false due descent gate. Firmed grip, scripted lift and carry at z0.30 with gripper+1 and step_clip0.012; released centered over cavity. No reset or oracle coordinates."
+  ],
+  "pick_result": {
+    "instruction": "grasp the green capped salad dressing bottle",
+    "success": false,
+    "chunks_used": 8,
+    "peak_lift_m": 0.09980592131614685,
+    "final_gripper_opening": 0.036612413823604584,
+    "visual_grasp_confirmed": true,
+    "diagnostics": {
+      "descent_done": false,
+      "descent_m": 0.0787,
+      "post_min_ascent_m": 0.0998
+    }
+  },
+  "final_state": {
+    "robot0_eef_pos": [
+      0.009439684222446077,
+      0.2755348539276775,
+      0.3002894333272956
+    ],
+    "robot0_eef_quat": [
+      0.9983562677857206,
+      0.008461071519139385,
+      -0.05485916047295837,
+      -0.01427043636036996
+    ],
+    "robot0_gripper_qpos": [
+      0.02596731520750928,
+      -0.025904598065259573
+    ],
+    "object_names": [
+      "alphabet_soup_1",
+      "basket_1",
+      "bbq_sauce_1",
+      "chocolate_pudding_1",
+      "ketchup_1",
+      "orange_juice_1",
+      "salad_dressing_1"
+    ]
+  },
+  "publication_notes": "Copied from the historical successful audit; local memory-root path made relative. Recorded prompt strings are planner tool arguments; the SmolVLA bridge used a fixed training instruction. The published memory is a subset of the original corpus."
+}

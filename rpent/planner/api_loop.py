@@ -108,6 +108,8 @@ class ApiAgentLoop(Planner):
         no_images: bool = False,
         timeout_s: float = 1200,
         interactive: bool = False,
+        episode_brief: bool = False,
+        compact_observation_images: bool = False,
     ) -> None:
         if reasoning_effort not in REASONING_EFFORTS:
             raise ValueError(f"unsupported reasoning effort: {reasoning_effort}")
@@ -120,6 +122,8 @@ class ApiAgentLoop(Planner):
         self.no_images = no_images
         self.timeout_s = timeout_s
         self.interactive = interactive
+        self.episode_brief = episode_brief
+        self.compact_observation_images = compact_observation_images
 
     def solve(
         self,
@@ -171,6 +175,8 @@ class ApiAgentLoop(Planner):
             dashboard_events=self.dashboard_events,
             no_images=self.no_images,
             capture=capture,
+            episode_brief=self.episode_brief,
+            compact_observation_images=self.compact_observation_images,
         )
         session = _Session(
             adapter, conversation_id, max_turns, interactive=self.interactive
@@ -318,12 +324,29 @@ class _HarnessToolkit(FunctionToolset):
         dashboard_events: DashboardEventSink,
         no_images: bool,
         capture: CapturingModel | None = None,
+        episode_brief: bool = False,
+        compact_observation_images: bool = False,
     ) -> None:
         super().__init__(id="rpent")
         self.toolkit = toolkit
         self.dashboard_events = dashboard_events
         self.no_images = no_images
         self.capture = capture
+        self.episode_brief = episode_brief
+        if episode_brief and not callable(getattr(toolkit, "episode_brief", None)):
+            raise ValueError("This toolkit does not provide an episode brief")
+        self.observation_images = None
+        if compact_observation_images:
+            from rpent.planner.episode_context import ObservationImages
+
+            moves = {item.name: item for item in toolkit.list_tools()}
+            fields = (
+                moves["move_to"].args_schema.model_fields if "move_to" in moves else {}
+            )
+            self.observation_images = ObservationImages(
+                move_tol=fields["tol"].default if "tol" in fields else 0.012,
+                yaw_tol=fields["yaw_tol"].default if "yaw_tol" in fields else 0.02,
+            )
         self.finish_result: dict[str, Any] | None = None
         self.tool_calls = 0
         self.messages: list[dict[str, Any]] = []
@@ -425,7 +448,12 @@ class _HarnessToolkit(FunctionToolset):
                         else "image/png"
                     ),
                 )
-                result = ToolReturn(return_value=metadata, content=[image])
+                images = [image]
+                if self.observation_images is not None:
+                    images = self.observation_images.attach(
+                        "read_image", metadata, images
+                    )
+                result = ToolReturn(return_value=metadata, content=images)
         except Exception as exc:
             result = ToolReturn(return_value={"error": str(exc)})
         if capture is not None:
@@ -485,12 +513,18 @@ class _HarnessToolkit(FunctionToolset):
         with self.capture.tool(ctx) if self.capture else nullcontext():
             result = await self.execute(name, arguments, ctx)
             content: list[str | BinaryContent] = [result.to_text()]
-            for image in result.images:
-                content.append(
-                    "[Image omitted: --no-images is enabled.]"
-                    if self.no_images
-                    else BinaryContent(data=image, media_type="image/png")
+            if self.no_images:
+                content.extend(
+                    "[Image omitted: --no-images is enabled.]" for _ in result.images
                 )
+            else:
+                images = [
+                    BinaryContent(data=image, media_type="image/png")
+                    for image in result.images
+                ]
+                if self.observation_images is not None:
+                    images = self.observation_images.attach(name, result.data, images)
+                content.extend(images)
             result = ToolReturn(return_value=content)
             if self.capture is not None:
                 self.capture.feedback(ctx, "pydantic_ai.tool_return", result)
@@ -592,6 +626,16 @@ class _Session(AbstractCapability):
             if self.interactive:
                 message += " Use /exit to close the session."
             raise _RequestBudgetExhausted(message) from None
+        if self.toolkit.observation_images is not None:
+            request_context.messages = self.toolkit.observation_images.project(
+                request_context.messages
+            )
+        if self.toolkit.episode_brief:
+            from rpent.planner.episode_context import inject_brief
+
+            request_context.messages = inject_brief(
+                request_context.messages, self.toolkit.toolkit.episode_brief()
+            )
         if self.toolkit.capture is not None:
             self.toolkit.capture.before_request(ctx)
         return request_context

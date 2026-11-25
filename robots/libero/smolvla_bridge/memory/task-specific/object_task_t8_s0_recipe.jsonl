@@ -1,0 +1,13 @@
+{"action": "move_to", "xyz": [-0.047, 0.27, 0.3], "gripper": -1, "step_clip": 0.02}
+{"action": "move_to", "xyz": [0.15, 0.026, 0.32], "gripper": -1, "step_clip": 0.02}
+{"action": "pi0_pick", "prompt": "pick up the salad dressing", "max_chunks": 8, "lift_thresh": 0.08, "gripper_closed_thresh": 0.06}
+{"action": "pi0_pick", "prompt": "pick up the salad dressing", "max_chunks": 8, "lift_thresh": 0.08, "gripper_closed_thresh": 0.06}
+{"action": "pi0_pick", "prompt": "Pick the salad dressing and place it in the basket", "max_chunks": 8, "lift_thresh": 0.05, "gripper_closed_thresh": 0.06}
+{"action": "move_to", "xyz": [0.153, 0.15, 0.29], "gripper": -1, "step_clip": 0.02}
+{"action": "move_to", "xyz": [0.153, 0.031, 0.22], "gripper": -1, "step_clip": 0.015}
+{"action": "pi0_pick", "prompt": "grasp the green capped salad dressing bottle", "max_chunks": 8, "lift_thresh": 0.05, "gripper_closed_thresh": 0.06}
+{"action": "set_gripper", "gripper": 1, "steps": 10}
+{"action": "move_to", "xyz": [0.136, 0.064, 0.3], "gripper": 1, "step_clip": 0.012}
+{"action": "move_to", "xyz": [0.07, 0.15, 0.3], "gripper": 1, "step_clip": 0.012}
+{"action": "move_to", "xyz": [0.009, 0.2784, 0.3], "gripper": 1, "step_clip": 0.012, "tol": 0.006}
+{"action": "release", "max_steps": 30}

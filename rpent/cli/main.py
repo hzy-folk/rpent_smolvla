@@ -177,6 +177,16 @@ def _build_argparser() -> argparse.ArgumentParser:
         "read_image then returns the image name instead, with a notice.",
     )
     ap.add_argument(
+        "--episode-brief",
+        action="store_true",
+        help="Opt in to a short factual brief on each API request (LIBERO only).",
+    )
+    ap.add_argument(
+        "--compact-observation-images",
+        action="store_true",
+        help="Opt in to keeping latest and key observation images in API history (LIBERO only).",
+    )
+    ap.add_argument(
         "--planner-timeout-s",
         type=int,
         default=None,
@@ -336,6 +346,11 @@ def _start_continuation_session(
         dashboard_events=dashboard_events,
         no_images=args.no_images,
         interactive=args.tui,
+        **{
+            key: True
+            for key in ("episode_brief", "compact_observation_images")
+            if getattr(args, key, False)
+        },
     )
     system_prompt = prompt_bundle.render(
         "system",
@@ -429,6 +444,11 @@ def main() -> int:
             parser.error("Flash Mode is evaluation-only; remove --explore")
         if robot_spec.run_flash is None:
             parser.error(f"Flash Mode is not supported for robot {args.robot_name!r}")
+    if any(
+        getattr(args, key, False)
+        for key in ("episode_brief", "compact_observation_images")
+    ) and (args.planner != "api" or args.robot_name != "libero"):
+        parser.error("Episode context options require --robot libero --planner api")
     if args.explore and not robot_spec.supports_exploration:
         detail = (
             " Real-robot exploration requires operator-mediated scene restoration "
@@ -505,6 +525,11 @@ def main() -> int:
         dashboard_events=dashboard_events,
         no_images=args.no_images,
         interactive=args.tui,
+        **{
+            key: True
+            for key in ("episode_brief", "compact_observation_images")
+            if getattr(args, key, False)
+        },
     )
     prompt_bundle = robot_spec.prompts
     prompt_vars = {**prompt_vars, "output_dir": output_dir}

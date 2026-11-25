@@ -1061,3 +1061,32 @@ def test_invalid_memory_source_fails_before_startup(
         cli.main()
     assert exc.value.code == 2
     assert message in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("flag", ["--episode-brief", "--compact-observation-images"])
+def test_episode_context_rejects_non_api_before_runtime(monkeypatch, flag):
+    cli = _cli_module()
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "rpent",
+            "--robot",
+            "libero",
+            "--suite",
+            "libero_object_task",
+            "--task",
+            "8",
+            "--planner",
+            "codex",
+            flag,
+        ],
+    )
+
+    def unexpected(*args, **kwargs):
+        pytest.fail("Unsupported context options must fail before memory preparation")
+
+    monkeypatch.setattr("rpent.memory.loading.prepare_run_memory", unexpected)
+    with pytest.raises(SystemExit) as exc:
+        cli.main()
+    assert exc.value.code == 2

@@ -342,6 +342,11 @@ def _run_dashboard_task(
                         claude_code_max_budget_usd=args.claude_code_max_budget_usd,
                         dashboard_events=state,
                         no_images=args.no_images,
+                        **{
+                            key: True
+                            for key in ("episode_brief", "compact_observation_images")
+                            if getattr(args, key, False)
+                        },
                     )
                     result = planner.solve(
                         system_prompt=system_prompt,

@@ -190,6 +190,8 @@ def get_toolkit(
         attempts_per_session=attempts_per_session,
         state_output_dir=state_output_dir,
         policy_kind=config.task_desc.get("policy_kind", "vla"),
+        assess_movement=config.prompt_vars.get("assess_movement", False),
+        movement_thresholds=config.prompt_vars.get("movement_thresholds"),
     )
 
 
@@ -214,6 +216,29 @@ def _add_cli_args(parser: argparse.ArgumentParser, use_dashboard: bool) -> None:
         choices=MEMORY_VERSIONS,
         default="auto",
         help="HF memory: auto selects by model; explicit versions override. Effort describes memory generation only.",
+    )
+    parser.add_argument(
+        "--assess-movement",
+        action="store_true",
+        help="Opt in to numeric move_to outcomes and a three-stall warning (no automatic recovery).",
+    )
+    parser.add_argument(
+        "--move-min-progress-m",
+        type=float,
+        default=0.002,
+        help="Minimum move improvement in meters when assessment is enabled.",
+    )
+    parser.add_argument(
+        "--move-min-progress-fraction",
+        type=float,
+        default=0.02,
+        help="Relative move improvement threshold (0–1).",
+    )
+    parser.add_argument(
+        "--move-target-tolerance-m",
+        type=float,
+        default=0.005,
+        help="Maximum target displacement within one stalled-call group.",
     )
     parser.add_argument("--max-episode-steps", type=int, default=10000)
     add_cuda_device_arg(parser)
@@ -389,6 +414,19 @@ def _parse_config(args: argparse.Namespace) -> RunConfig:
         "session_number": 1,
         "session_max": max(1, args.explore_sessions) if explore else 1,
     }
+    if getattr(args, "assess_movement", False):
+        if planner != "api":
+            raise ValueError("--assess-movement currently requires --planner api")
+        from robots.libero.episode_feedback import MotionMonitor
+
+        thresholds = {
+            "min_progress_m": getattr(args, "move_min_progress_m", 0.002),
+            "min_progress_fraction": getattr(args, "move_min_progress_fraction", 0.02),
+            "target_tolerance_m": getattr(args, "move_target_tolerance_m", 0.005),
+        }
+        MotionMonitor(**thresholds)
+        prompt_vars["assess_movement"] = True
+        prompt_vars["movement_thresholds"] = thresholds
     prompt_vars["memory_dir"] = str(memory_dir)
     # Per-cell inbox: parallel explore runs must not append to a shared file.
     prompt_vars["memory_inbox"] = str(memory_dir / "_internal" / "inbox" / recipe_tag)

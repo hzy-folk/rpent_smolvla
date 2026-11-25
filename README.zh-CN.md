@@ -27,6 +27,57 @@
   <img src="https://github.com/RLinf/misc/raw/main/pic/rpent_framework.png" alt="RPent framework"/>
 </div>
 
+## 本仓库新增功能
+
+本仓库在 [RPent](https://github.com/RLinf/RPent) 基础上增加了 **LIBERO-Pro 沙拉酱任务的 SmolVLA 桥接**和**三个可选 API 运行功能**。下方保留上游框架说明、作者归属和公开榜单；这些榜单数据不代表本次 SmolVLA 接入的评测成绩。
+
+### SmolVLA + LIBERO-Pro
+
+独立桥接服务已经包含在 [`robots/libero/smolvla_bridge/`](robots/libero/smolvla_bridge/README.md) 中，通过现有 VLA RPC 协议提供任务微调后的 SmolVLA 推理。高层 API 负责观察、定位、选择工具、检查抓取、搬运与释放。示例使用 `--libero-type pro`、`libero_object_task`、task **8**、seed **0**，把沙拉酱放入篮子。
+
+桥接**有意将模型输入固定为 `pick up the salad dressing`**，与训练指令保持一致；保留 8 维状态、7 维 OSC 增量动作、两路 256×256 图片和每个动作块执行前 5 步的配置。`--am-backend pi05` 只复用现有客户端协议，连接的服务实际运行 SmolVLA。仓库包含精简历史记忆，也可通过 `RPENT_MEMORY_DIR` 指向其他本地记忆库。
+
+两套环境需要分别安装：
+
+| 环境 | 依赖来源 | 用途 |
+| --- | --- | --- |
+| RPent / Python 3.11 | [`pyproject.toml`](pyproject.toml) 中的 `.[libero-pro]` | API 规划、LIBERO-Pro、SAM3、工具和记忆 |
+| SmolVLA / Python 3.10 或 3.11 | [桥接 requirements](robots/libero/smolvla_bridge/requirements.txt) | LeRobot 0.3.3 和固定版本的 SmolVLA 推理依赖 |
+
+先按照[完整 SmolVLA 使用说明](robots/libero/smolvla_bridge/README.md)安装环境，准备仿真资产、基础模型、处理器、SAM3 和任务 checkpoint，并配置本地路径。准备好后，从仓库根目录打开两个终端：
+
+```bash
+# 终端一：加载配置并启动 SmolVLA。
+source robots/libero/smolvla_bridge/env.local.sh
+bash robots/libero/smolvla_bridge/run_server.sh --port 8320
+
+# 终端二：加载配置，按使用说明设置 API 地址、模型名和密钥后运行。
+source robots/libero/smolvla_bridge/env.local.sh
+bash robots/libero/smolvla_bridge/run_episode.sh
+```
+
+**任务 checkpoint 未包含在代码中，目前尚无公开下载地址。** 真实推理需要发布者另外提供匹配的 `checkpoint_015000.pt`，资产清单已记录其 SHA256。新下载的仓库可以先执行文档中的 CPU mock 自检，无需权重。历史 seed-0 记录中既有成功也有失败；固定仿真 seed 不会固定 API 决策或 VLA 随机采样。
+
+### 三个可选 API 运行功能
+
+三个开关相互独立，**默认全部关闭**，目前要求 **`--robot libero --planner api`**，也会传递到 API Dashboard 和探索会话。它们复用现有依赖，不改变 VLA 权重或桥接固定指令。
+
+| 开关 | 实际行为 |
+| --- | --- |
+| `--episode-brief` | 在最新反馈后添加最多四行的当前简报，包含近期操作、当前测量和需要注意的问题。由程序生成，每轮替换旧简报，不增加 API 请求。 |
+| `--compact-observation-images` | 保留最新、首次观测及最近最多两组关键事件前后图片（抓取/接触、释放、报错或移动未到位）。较早普通图片不再进入后续请求，文字和本地原图保留，模型可以按需读取；显式读图和分割叠加图至少送达一次。 |
+| `--assess-movement` | 为 `move_to` 返回到位、部分进展、无进展或未知的数值判断。连续三次可比较的调用无进展时提示改变方法，程序不硬拦截，也不自动补救。 |
+
+```bash
+# 配好桥接和 API 后，可以只加其中一项，也可以同时开启三项。
+bash robots/libero/smolvla_bridge/run_episode.sh \
+  --episode-brief --compact-observation-images --assess-movement
+```
+
+移动阈值可以调整；夹爪测量和抓取启发式不等于持物确认，`--no-images` 仍会关闭全部模型图片。具体边界见[运行功能说明](docs/source-zh/rst_source/simulators/libero.rst#可选-api-运行反馈)和[验证记录](robots/libero/smolvla_bridge/VALIDATION.md)。已完成离线测试、本地 RPC、真实 checkpoint 推理和实际请求层面的功能检查；尚未完成全新机器安装验证，也未证实成功率提升。
+
+Git 默认忽略本地环境、密钥、权重、日志和开发机完整记忆预览库，保留准备发布的精简记忆与配置模板。参考[环境变量示例](robots/libero/smolvla_bridge/env.example.sh)，把私有配置保存在已忽略的 `env.local.sh` 中。
+
 ## 排行榜
 
 对比 RPent 与参考方法在 LIBERO、LIBERO-PRO、RoboCasa365 Target50 和 RoboTwin C2R 上的成功率。排名仅限图中方法及评测范围；套件成绩和模型配置见 [排行榜](https://rpent.readthedocs.io/zh-cn/latest/rst_source/leaderboard/index.html)。
@@ -46,6 +97,8 @@ RPent 面向以下四类用户：
 - **具身智能体的最终用户**：即上一类开发者所服务的用户。只需安装 RPent 及相应的真实机器人扩展，即可开箱即用地运行预定义任务，无需具备机器学习专业知识。
 
 ## 最新动态
+
+- [2026/11] 本仓库新增 [SmolVLA 沙拉酱桥接和三个可选 API 运行功能](#本仓库新增功能)。
 
 - [2026/11] 🔥 新增数据飞轮。支持轨迹采集和数据清洗功能，用采集的成功轨迹对 VLA 进行监督微调后，RPent 在 RoboTwin 评测中的任务成功率从 48% 升至 72%，提高 **24 个百分点**。详见 [使用指南](https://rpent.readthedocs.io/zh-cn/latest/rst_source/guides/flywheel.html)。
 - [2026/10] 🔥 新增可选的 APXInf VLA endpoint 接入，参见 [部署指南](https://rpent.readthedocs.io/zh-cn/latest/rst_source/guides/advanced_deployment.html#apxinf-vla-service-optional)。
@@ -72,6 +125,7 @@ RPent 面向以下四类用户：
     <tr>
       <td>
         <ul style="margin-left: 0; padding-left: 16px;">
+          <li><a href="docs/source-zh/rst_source/guides/configure_planner.rst">API</a> ✅</li>
           <li><a href="https://rpent.readthedocs.io/zh-cn/latest/rst_source/guides/configure_planner.html#claude-code-planner">Claude Code</a> ✅</li>
           <li><a href="https://rpent.readthedocs.io/zh-cn/latest/rst_source/guides/configure_planner.html#codex-planner">Codex</a> ✅</li>
           <li><a href="https://rpent.readthedocs.io/zh-cn/latest/rst_source/development/add_planner.html">Custom Planner</a> ✅</li>
@@ -82,6 +136,7 @@ RPent 面向以下四类用户：
           <li><b>VLA</b></li>
           <ul>
             <li><a href="https://rpent.readthedocs.io/zh-cn/latest/rst_source/simulators/libero.html">Pi0.5</a> ✅</li>
+            <li><a href="robots/libero/smolvla_bridge/README.md">SmolVLA</a> (LIBERO-Pro 沙拉酱任务) ✅</li>
             <li><a href="https://rpent.readthedocs.io/zh-cn/latest/rst_source/simulators/robocasa.html">RLDX-1</a> ✅</li>
             <li><a href="https://rpent.readthedocs.io/zh-cn/latest/rst_source/simulators/robotwin.html">LingBot-VLA</a> ✅</li>
           </ul>
@@ -117,8 +172,10 @@ RPent 面向以下四类用户：
 
 **1. 选择一个环境并安装 RPent。**
 
+克隆本仓库即可获得上面的 SmolVLA 桥接和可选运行功能。
+
 ```bash
-git clone https://github.com/RLinf/RPent rpent && cd rpent
+git clone https://github.com/hzy-folk/rpent_smolvla.git rpent && cd rpent
 # 默认推荐（LIBERO-PRO）：
 pip install -e ".[libero-pro]"
 

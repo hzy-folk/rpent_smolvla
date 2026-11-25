@@ -357,3 +357,60 @@ client without touching the robot by:
    surface (e.g. ``pi0_pick`` → ``mymodel_pick``) needs to change.
 
 See :doc:`../development/add_primitive` for the full walkthrough.
+
+Optional API Episode Feedback
+-----------------------------
+
+The following switches are independent and disabled by default. They currently
+require ``--robot libero --planner api`` and also apply to API Dashboard and
+exploration sessions:
+
+* ``--episode-brief`` adds one current, at most four-line factual brief after
+  the latest feedback. It replaces the previous brief without an additional
+  model request. Gripper measurements and pick heuristics do not confirm a grasp.
+* ``--compact-observation-images`` keeps the latest observation, the first
+  observed scene, and up to two recent key-event pairs (pick, release, contact,
+  or abnormal motion). Earlier routine move images are omitted from subsequent
+  requests; their text results and local artifacts remain available. Explicit
+  ``read_image`` and ``view_env_state`` requests, and segmentation overlays, are
+  delivered at least once. ``--no-images`` still suppresses all model images.
+* ``--assess-movement`` appends numeric ``motion_assessment`` feedback to
+  ``move_to``. Status is ``completed``, ``partial_progress``, ``no_progress``, or
+  ``unknown``. Three comparable no-progress calls request re-observation or a
+  changed approach; the runtime does not automatically recover or block motion.
+
+Append any combination to an existing API task command:
+
+.. code-block:: bash
+
+   --episode-brief --compact-observation-images --assess-movement
+
+Movement improvement must exceed the larger of ``--move-min-progress-m``
+(default 0.002 m) and ``--move-min-progress-fraction`` (default 0.02) times the
+initial error. Comparable targets stay within ``--move-target-tolerance-m``
+(default 0.005 m) of the group's original target. Changed control conditions,
+other physical actions, resets, progress, and unknown outcomes break the streak;
+read-only calls do not add to it. Yaw-only progress is considered when requested.
+These initial thresholds require validation for each setup. No model weights,
+VLA input images, or bridge instruction settings are changed.
+
+
+SmolVLA Salad-Dressing Bridge
+----------------------------------------
+
+``robots/libero/smolvla_bridge/`` contains a standalone HTTP VLA service,
+portable profiles, isolated model requirements, asset hashes, launch scripts,
+and a small historical memory corpus for LIBERO-Pro ``libero_object_task``,
+task 8, seed 0. Follow the repository's
+:download:`SmolVLA guide <../../../../robots/libero/smolvla_bridge/README.en.md>`
+for installation, assets, two-terminal startup, and output interpretation.
+
+Use a separate model environment; the bridge retains the fixed training
+instruction ``pick up the salad dressing``, 8D state, 7D OSC actions, and two
+256-by-256 images. The existing Pi0.5 client connects through
+``--am-backend pi05 --am-endpoint http://127.0.0.1:8320``.
+The task checkpoint must be supplied separately; no public download URL has
+been published yet. A fresh clone can run the mock protocol check without it,
+but real inference requires the checkpoint. Historical success is not a
+success-rate claim. The three optional API episode-feedback switches remain
+disabled unless explicitly passed to ``run_episode.sh``.

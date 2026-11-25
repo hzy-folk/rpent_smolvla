@@ -59,6 +59,8 @@ class LiberoToolkit(Toolkit):
         attempts_per_session: int = 0,
         state_output_dir: Path | str | None = None,
         policy_kind: str = "vla",
+        assess_movement: bool = False,
+        movement_thresholds: dict[str, float] | None = None,
     ) -> None:
         if mode not in {"evaluation", "exploration"}:
             raise ValueError(f"unsupported LIBERO toolkit mode: {mode!r}")
@@ -71,6 +73,11 @@ class LiberoToolkit(Toolkit):
         )
         self._mode = mode
         self._policy_kind = policy_kind
+        self._motion_monitor = None
+        if assess_movement:
+            from robots.libero.episode_feedback import MotionMonitor
+
+            self._motion_monitor = MotionMonitor(**(movement_thresholds or {}))
         self._solved: bool = False
         self._attempt: int = 1
         # Bound the resettable attempts owned by this planner session.
@@ -138,7 +145,24 @@ class LiberoToolkit(Toolkit):
                 "Episode already ended; no further motion is allowed. "
                 f"Call finish with status={status!r}."
             )
-        return handler(**kwargs)
+        if self._motion_monitor is None:
+            return handler(**kwargs)
+        if handler.name != "move_to":
+            self._motion_monitor.reset()
+        try:
+            result = handler(**kwargs)
+        except BaseException:
+            self._motion_monitor.reset()
+            raise
+        if result.is_error:
+            self._motion_monitor.reset()
+        return result
+
+    def episode_brief(self) -> str:
+        """Return a short snapshot for the opt-in API brief capability."""
+        from robots.libero.episode_feedback import render_brief
+
+        return render_brief(self._state)
 
     def _wam_finish(self, inner: Any, **kwargs: Any) -> ToolResult:
         """Require native task success before accepting a success claim."""
@@ -201,11 +225,16 @@ class LiberoToolkit(Toolkit):
     ) -> ToolResult:
         frame_start = self._action_frame_cursor
         self._action_frame_cursor = self._primitives.recorded_frame_count()
-        record = libero_tools.dump_state(
-            self._primitives,
-            self._state,
-            log={"command": command, "result": result, "elapsed_s": elapsed_s},
-        )
+        try:
+            record = libero_tools.dump_state(
+                self._primitives,
+                self._state,
+                log={"command": command, "result": result, "elapsed_s": elapsed_s},
+            )
+        except Exception:
+            if self._motion_monitor is not None:
+                self._motion_monitor.reset()
+            raise
         self._solved |= record.terminated
         if self._dashboard_events.enabled:
             try:
@@ -260,6 +289,7 @@ class LiberoToolkit(Toolkit):
         primitives = libero_tools.LiberoPrimitives(
             check_cancelled=self.raise_if_cancelled,
             policy_kind=self._policy_kind,
+            motion_monitor=self._motion_monitor,
             **runtime_kwargs,
         )
         primitives.reset()
